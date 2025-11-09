@@ -1,0 +1,5 @@
+import GmudAgendaForm from "./GmudAgendaForm";
+
+export default function App() {
+  return <GmudAgendaForm />;
+}
