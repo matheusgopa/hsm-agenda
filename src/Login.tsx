@@ -7,7 +7,7 @@ import {
   FaMoon,
   FaSun,
 } from "react-icons/fa";
-import hsmLogo from "./assets/hsm-logo.png"; // ✅ Caminho correto dentro de src/
+import hsmLogo from "./assets/hsm-logo.png"; 
 
 export default function Login({ onLogin }: { onLogin: (user: string) => void }) {
   const [darkMode, setDarkMode] = useState(false);

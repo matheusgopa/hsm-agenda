@@ -42,6 +42,8 @@ export default function GmudAgendaForm({
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [enviado, setEnviado] = useState(false);
   const [tiposAgenda, setTiposAgenda] = useState<Array<"Convênio" | "HSM+">>([]);
+  const [numeroSolicitacao, setNumeroSolicitacao] = useState("");
+
 
   const diasOrdenados = useMemo(
     () => [...dias].sort((a, b) => a.data.localeCompare(b.data)),
@@ -79,6 +81,26 @@ export default function GmudAgendaForm({
       })
     );
   }, [solicitante, dias, observacao, tiposAgenda, selectedDates]);
+
+  // 🔢 Gera número de solicitação único e sequencial
+useEffect(() => {
+  const anoAtual = new Date().getFullYear();
+  const ultima = localStorage.getItem("ultimoNumeroSolicitacao");
+
+  let novoNumero = 1;
+
+  if (ultima) {
+    const [num, ano] = ultima.split("/").map((v) => v.trim());
+    if (parseInt(ano) === anoAtual) {
+      novoNumero = parseInt(num) + 1;
+    }
+  }
+
+  const numeroAtual = `${novoNumero}/${anoAtual}`;
+  setNumeroSolicitacao(numeroAtual);
+  localStorage.setItem("ultimoNumeroSolicitacao", numeroAtual);
+}, []);
+
 
   // 🗓️ Atualiza dias ao mudar seleção no calendário
   useEffect(() => {
@@ -196,6 +218,20 @@ export default function GmudAgendaForm({
             </button>
           </div>
         </div>
+<div className="flex items-center justify-between mb-4">
+  <div>
+    <label className="block font-medium text-gray-700">Nº da Solicitação</label>
+    <input
+      type="text"
+      value={numeroSolicitacao}
+      readOnly
+      className="border rounded-lg px-3 py-2 w-40 bg-gray-100 font-semibold text-hsmBlue"
+    />
+  </div>
+  <div className="text-right text-sm text-gray-500">
+    {new Date().toLocaleDateString("pt-BR")}
+  </div>
+</div>
 
         {/* 🧾 Formulário principal */}
         <form onSubmit={handleSubmit} className="space-y-8">

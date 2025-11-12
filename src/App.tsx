@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react"; 
 import Login from "./Login";
 import GmudAgendaForm from "./GmudAgendaForm";
 import SolicitacoesEnviadas from "./SolicitacoesEnviadas";
 import Supervisao from "./Supervisao";
+import DiretoriaMedica from "./DiretoriaMedica";
+import DiretoriaTI from "./DiretoriaTI";
 
 export default function App() {
   const [user, setUser] = useState<string | null>(localStorage.getItem("user"));
-  const [role, setRole] = useState<"medico" | "supervisao">("medico");
-  const [screen, setScreen] = useState<"form" | "historico" | "supervisao">(
-    "form"
-  );
+  const [role, setRole] = useState<"medico" | "supervisao" | "ti" |"diretoria">("medico");
+  const [screen, setScreen] = useState<"form" | "historico" | "supervisao" | "ti" |"diretoria">("form");
   const [lastActivity, setLastActivity] = useState(Date.now());
 
   // 🕒 Sessão expira após 10 minutos sem atividade
@@ -43,10 +43,19 @@ export default function App() {
     setUser(username);
     localStorage.setItem("user", username);
 
-    // Se o usuário for "supervisao", muda o perfil automaticamente
-    if (username.toLowerCase() === "supervisao") {
+    const name = username.toLowerCase();
+
+    if (name === "supervisao") {
       setRole("supervisao");
       setScreen("supervisao");
+    } 
+    else if (name === "ti") {
+      setRole("ti");
+      setScreen("ti");
+    } 
+    else if (name === "diretoria" || name === "diretoria medica" || name === "diretor") {
+      setRole("diretoria");
+      setScreen("diretoria");
     } else {
       setRole("medico");
       setScreen("form");
@@ -56,10 +65,33 @@ export default function App() {
   // 🔄 Controle de telas
   if (!user) return <Login onLogin={handleLogin} />;
 
-  if (role === "supervisao") {
-    return <Supervisao onVoltar={handleLogout} />;
+  // 👩‍💼 Tela da Supervisão
+  if (role === "supervisao" && screen === "supervisao") {
+    return (
+      <Supervisao
+        onVoltar={handleLogout}
+      />
+    );
   }
 
+  // 👨‍⚕️ Tela da Diretoria Médica
+  if (role === "diretoria" && screen === "diretoria") {
+    return (
+      <DiretoriaMedica
+        onVoltar={handleLogout}
+      />
+    );
+  }
+  // Tela da TI
+  if (role === "ti" && screen === "ti") {
+    return (
+      <DiretoriaTI
+        onVoltar={handleLogout}
+      />
+    );
+  }
+
+  // 📜 Histórico (Médico)
   if (screen === "historico") {
     return (
       <SolicitacoesEnviadas
@@ -69,6 +101,7 @@ export default function App() {
     );
   }
 
+  // 🩺 Formulário de criação (Médico)
   return (
     <GmudAgendaForm
       user={user}

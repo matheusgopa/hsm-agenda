@@ -12,8 +12,8 @@ interface Dia {
 
 interface Solicitacao {
   solicitante: string;
-  tipoAgenda: string; // agora é string (ex: "Convênio + HSM+")
-  tiposAgenda?: Array<"Convênio" | "HSM+">; // novo campo opcional
+  tipoAgenda: string;
+  tiposAgenda?: Array<"Convênio" | "HSM+">;
   dias: Dia[];
   observacao: string;
   dataEnvio: string;
@@ -27,16 +27,28 @@ interface Props {
   onVoltar: () => void;
 }
 
+function toKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function fromKey(key: string) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
 export default function Supervisao({ onVoltar }: Props) {
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [criando, setCriando] = useState(false);
-
   const [solicitante, setSolicitante] = useState("");
   const [tiposAgenda, setTiposAgenda] = useState<Array<"Convênio" | "HSM+">>([]);
   const [dias, setDias] = useState<Dia[]>([]);
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [observacao, setObservacao] = useState("");
   const [anexo, setAnexo] = useState<string | null>(null);
+  const [numeroSolicitacao, setNumeroSolicitacao] = useState("");
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   // filtros
   const [busca, setBusca] = useState("");
@@ -51,18 +63,12 @@ export default function Supervisao({ onVoltar }: Props) {
 
   useEffect(() => {
     const data = JSON.parse(localStorage.getItem("solicitacoes") || "[]");
-
-    // 🔧 Correção retroativa
     data.forEach((s: any) => {
       if (!s.status) s.status = "Pendente";
       if (!s.origem) s.origem = "Médico";
       if (!s.tipoAgenda) s.tipoAgenda = "Convênio";
-      if (!s.tiposAgenda) {
-        // converte antigas para novo formato
-        s.tiposAgenda = s.tipoAgenda.split("+").map((t: string) => t.trim());
-      }
+      if (!s.tiposAgenda) s.tiposAgenda = s.tipoAgenda.split("+").map((t: string) => t.trim());
     });
-
     localStorage.setItem("solicitacoes", JSON.stringify(data));
     setSolicitacoes(data);
   }, []);
@@ -92,11 +98,6 @@ export default function Supervisao({ onVoltar }: Props) {
     reader.readAsDataURL(file);
   }
 
-  function toKey(d: Date) {
-    return format(d, "yyyy-MM-dd");
-  }
-
-  // Atualiza dias conforme calendário
   useEffect(() => {
     setDias((prev) => {
       const selectedKeys = new Set(selectedDates.map(toKey));
@@ -113,13 +114,27 @@ export default function Supervisao({ onVoltar }: Props) {
     });
   }, [selectedDates]);
 
+  useEffect(() => {
+    if (criando) {
+      const anoAtual = new Date().getFullYear();
+      const ultima = localStorage.getItem("ultimoNumeroSolicitacao");
+      let novoNumero = 1;
+      if (ultima) {
+        const [num, ano] = ultima.split("/").map((v) => v.trim());
+        if (parseInt(ano) === anoAtual) novoNumero = parseInt(num) + 1;
+      }
+      const numeroAtual = `${novoNumero}/${anoAtual}`;
+      setNumeroSolicitacao(numeroAtual);
+      localStorage.setItem("ultimoNumeroSolicitacao", numeroAtual);
+    }
+  }, [criando]);
+
   function handleCriarSolicitacao(e: React.FormEvent) {
     e.preventDefault();
     if (!solicitante || dias.length === 0) {
       alert("Preencha o nome do médico e selecione pelo menos um dia.");
       return;
     }
-
     if (tiposAgenda.length === 0) {
       alert("Selecione pelo menos um tipo de agenda (Convênio e/ou HSM+).");
       return;
@@ -157,20 +172,16 @@ export default function Supervisao({ onVoltar }: Props) {
     setFiltroAgenda("Todos");
   }
 
-  // 🔍 Filtros
   const solicitacoesFiltradas = useMemo(() => {
     return solicitacoes.filter((s) => {
       const matchNome = s.solicitante.toLowerCase().includes(busca.toLowerCase());
       const matchOrigem = filtroOrigem === "Todos" || s.origem === filtroOrigem;
       const matchStatus = filtroStatus === "Todos" || s.status === filtroStatus;
       const matchTipo = filtroTipo === "Todos" || s.dias.some((d) => d.tipo === filtroTipo);
-
-      // agora aceita múltiplos tipos de agenda
       const matchAgenda =
         filtroAgenda === "Todos" ||
         (s.tiposAgenda?.includes(filtroAgenda) ?? s.tipoAgenda === filtroAgenda);
 
-      // período
       const dataEnvio = new Date(s.dataEnvio);
       const inicio = filtroInicio ? new Date(filtroInicio) : null;
       const fim = filtroFim ? new Date(filtroFim) : null;
@@ -336,7 +347,25 @@ export default function Supervisao({ onVoltar }: Props) {
           </div>
         )}
 
-        {/* Formulário de criação */}
+        {/* Nº da solicitação só ao criar */}
+        {criando && (
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <label className="block font-medium text-gray-700">Nº da Solicitação</label>
+              <input
+                type="text"
+                value={numeroSolicitacao}
+                readOnly
+                className="border rounded-lg px-3 py-2 w-40 bg-gray-100 font-semibold text-hsmBlue"
+              />
+            </div>
+            <div className="text-right text-sm text-gray-500">
+              {new Date().toLocaleDateString("pt-BR")}
+            </div>
+          </div>
+        )}
+
+        {/* Formulário completo */}
         {criando ? (
           <form onSubmit={handleCriarSolicitacao} className="space-y-6">
             <div>
@@ -351,7 +380,6 @@ export default function Supervisao({ onVoltar }: Props) {
               />
             </div>
 
-            {/* ✅ checkboxes */}
             <div>
               <label className="block font-medium mb-1">Tipo de Agenda</label>
               <div className="flex gap-6 items-center">
@@ -386,7 +414,7 @@ export default function Supervisao({ onVoltar }: Props) {
                 </label>
               </div>
             </div>
-            {/* Calendário */}
+
             <div className="border rounded-xl p-4 bg-gray-50">
               <h2 className="font-semibold text-gray-800 mb-3">Selecionar dias</h2>
               <DayPicker
@@ -404,7 +432,6 @@ export default function Supervisao({ onVoltar }: Props) {
               />
             </div>
 
-            {/* Lista de dias selecionados */}
             {dias.length > 0 && (
               <div className="border rounded-xl p-4 bg-white shadow-sm">
                 <h2 className="font-semibold mb-3 text-gray-800">Dias selecionados</h2>
@@ -415,7 +442,7 @@ export default function Supervisao({ onVoltar }: Props) {
                   >
                     <input
                       type="text"
-                      value={format(new Date(dia.data), "dd/MM/yyyy")}
+                      value={format(fromKey(dia.data), "dd/MM/yyyy")}
                       readOnly
                       className="border rounded-lg px-2 py-2 w-full sm:w-1/3 bg-gray-100"
                     />
@@ -450,7 +477,6 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
             )}
 
-            {/* Observação e anexo */}
             <div>
               <label className="block font-medium mb-1">Observação</label>
               <textarea
@@ -486,9 +512,14 @@ export default function Supervisao({ onVoltar }: Props) {
           solicitacoesFiltradas.map((sol, index) => (
             <div
               key={index}
-              className="border rounded-xl p-4 mb-4 shadow-sm bg-gray-50"
+              className="border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 transition-all"
             >
-              <div className="flex justify-between items-center mb-3">
+              <div
+                className="flex justify-between items-center cursor-pointer select-none"
+                onClick={() =>
+                  setExpanded((prev) => ({ ...prev, [index]: !prev[index] }))
+                }
+              >
                 <div>
                   <h2 className="font-semibold text-hsmBlue text-lg">
                     {sol.solicitante}
@@ -502,85 +533,102 @@ export default function Supervisao({ onVoltar }: Props) {
                       locale: ptBR,
                     })}
                   </p>
-
-                  {/* ✅ Exibe múltiplos tipos de agenda */}
                   <p className="text-sm text-gray-700 mt-1">
                     <strong>Tipo de Agenda:</strong>{" "}
                     {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
                   </p>
                 </div>
 
-                <span
-                  className={`px-3 py-1 text-sm rounded-full font-medium ${
-                    sol.status === "Encaminhada"
-                      ? "bg-blue-100 text-blue-700"
-                      : sol.status === "Aprovada"
-                      ? "bg-green-100 text-green-700"
-                      : sol.status === "Recusada"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-yellow-100 text-yellow-700"
-                  }`}
-                >
-                  {sol.status}
-                </span>
-              </div>
-
-              {/* Lista de dias */}
-              <div className="border rounded-lg bg-white p-3 mb-3">
-                <h3 className="font-medium mb-2 text-gray-700">Dias e horários:</h3>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  {sol.dias.map((d, i) => (
-                    <li key={i} className="flex justify-between">
-                      <span>
-                        {format(new Date(d.data), "dd/MM/yyyy", { locale: ptBR })}
-                      </span>
-                      <span>
-                        {d.tipo} — {d.inicio}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Observação e anexo */}
-              {sol.observacao && (
-                <p className="text-sm text-gray-500 italic mb-3">
-                  Observação: “{sol.observacao}”
-                </p>
-              )}
-
-              {sol.anexo && (
-                <a
-                  href={sol.anexo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-hsmBlue text-sm underline block mb-3"
-                >
-                  📎 Ver Anexo
-                </a>
-              )}
-
-              {/* Campo da supervisão */}
-              <textarea
-                value={sol.obsSupervisao || ""}
-                onChange={(e) => handleObsChange(index, e.target.value)}
-                placeholder="Observação da supervisão (opcional)"
-                className="w-full border rounded-lg px-3 py-2 mb-3 text-sm"
-              />
-
-              <div className="flex justify-end">
-                {sol.status === "Pendente" ? (
-                  <button
-                    onClick={() => handleEncaminhar(index)}
-                    className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`px-3 py-1 text-sm rounded-full font-medium ${
+                      sol.status === "Encaminhada"
+                        ? "bg-blue-100 text-blue-700"
+                        : sol.status === "Aprovada"
+                        ? "bg-green-100 text-green-700"
+                        : sol.status === "Recusada"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-yellow-100 text-yellow-700"
+                    }`}
                   >
-                    Encaminhar para Aprovação
-                  </button>
-                ) : (
-                  <span className="text-sm text-green-600 font-medium">
-                    ✅ Encaminhada
+                    {sol.status}
                   </span>
+
+                  {/* botão animado com seta */}
+                  <button
+                    className="text-sm text-hsmBlue hover:underline flex items-center gap-1"
+                  >
+                    <span>{expanded[index] ? "Recolher" : "Ver detalhes"}</span>
+                    <span
+                      className={`transform transition-transform duration-300 ${
+                        expanded[index] ? "rotate-180" : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                  expanded[index] ? "max-h-[1000px] opacity-100 mt-4" : "max-h-0 opacity-0"
+                }`}
+              >
+                <div className="border rounded-lg bg-white p-3 mb-3">
+                  <h3 className="font-medium mb-2 text-gray-700">Dias e horários:</h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    {sol.dias.map((d, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>
+                          {format(new Date(d.data), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                        <span>
+                          {d.tipo} — {d.inicio}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {sol.observacao && (
+                  <p className="text-sm text-gray-500 italic mb-3">
+                    Observação: “{sol.observacao}”
+                  </p>
                 )}
+
+                {sol.anexo && (
+                  <a
+                    href={sol.anexo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-hsmBlue text-sm underline block mb-3"
+                  >
+                    📎 Ver Anexo
+                  </a>
+                )}
+
+                <textarea
+                  value={sol.obsSupervisao || ""}
+                  onChange={(e) => handleObsChange(index, e.target.value)}
+                  placeholder="Observação da supervisão (opcional)"
+                  className="w-full border rounded-lg px-3 py-2 mb-3 text-sm"
+                />
+
+                <div className="flex justify-end">
+                  {sol.status === "Pendente" ? (
+                    <button
+                      onClick={() => handleEncaminhar(index)}
+                      className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
+                    >
+                      Encaminhar para Aprovação
+                    </button>
+                  ) : (
+                    <span className="text-sm text-green-600 font-medium">
+                      ✅ Encaminhada
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))
