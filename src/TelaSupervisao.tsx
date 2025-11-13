@@ -50,38 +50,48 @@ export default function TelaSupervisao({ onVoltar }: Props) {
 
   // Filtros
   const [busca, setBusca] = useState("");
-  const [filtroOrigem, setFiltroOrigem] = useState<"Todos" | "Médico" | "Supervisão">("Todos");
+  const [filtroOrigem, setFiltroOrigem] = useState<
+    "Todos" | "Médico" | "Supervisão"
+  >("Todos");
   const [filtroTipo, setFiltroTipo] = useState<"Todos" | TipoDia>("Todos");
-  const [filtroStatus, setFiltroStatus] = useState<"Todos" | StatusSolicitacao>("Pendente");
+  const [filtroStatus, setFiltroStatus] = useState<
+    "Todos" | StatusSolicitacao
+  >("Pendente");
   const [filtroInicio, setFiltroInicio] = useState<string>("");
   const [filtroFim, setFiltroFim] = useState<string>("");
   const [filtroAgenda, setFiltroAgenda] =
     useState<"Todos" | TipoAgendaSimples>("Todos");
 
-  // 🔁 Carregar, normalizar e corrigir solicitações antigas
+  // 🔁 Carregar e normalizar (inclui correção de NumeroSolicitacao → numeroSolicitacao)
   useEffect(() => {
-    let data: Solicitacao[] = JSON.parse(
-      localStorage.getItem("solicitacoes") || "[]"
-    );
+    let data: any[] = JSON.parse(localStorage.getItem("solicitacoes") || "[]");
 
     const anoAtual = new Date().getFullYear();
 
     data = data.map((s, i) => {
+      const numero =
+        s.numeroSolicitacao ||
+        s.NumeroSolicitacao || // remover legado
+        `${i + 1}/${anoAtual}`;
+
       return {
         ...s,
+        numeroSolicitacao: numero,
+        tiposAgenda:
+          s.tiposAgenda ??
+          s.tipoAgenda?.split("+").map((t: string) => t.trim()) ??
+          ["Convênio"],
         status: s.status || "Pendente",
         origem: s.origem || "Médico",
-        tiposAgenda: s.tiposAgenda || s.tipoAgenda?.split("+").map(t => t.trim()) || ["Convênio"],
-
-        // 🔥 Corrigir solicitações antigas (antes era NumeroSolicitacao)
-        numeroSolicitacao:
-          s.numeroSolicitacao ||
-          s.numeroSolicitacao ||
-          `${i + 1}/${anoAtual}`,
       };
     });
 
     localStorage.setItem("solicitacoes", JSON.stringify(data));
+    localStorage.setItem(
+      "ultimoNumeroSolicitacao",
+      data[data.length - 1]?.numeroSolicitacao || `1/${anoAtual}`
+    );
+
     setSolicitacoes(data);
   }, []);
 
@@ -90,7 +100,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
     localStorage.setItem("solicitacoes", JSON.stringify(lista));
   }
 
-  // Observação
+  // Observação da supervisão
   function handleObsChange(indexGlobal: number, valor: string) {
     const novas = [...solicitacoes];
     novas[indexGlobal].obsSupervisao = valor;
@@ -104,7 +114,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
     atualizarLocalStorage(novas);
   }
 
-  // Upload
+  // Upload de anexo
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -113,7 +123,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
     reader.readAsDataURL(file);
   }
 
-  // Atualiza lista de dias selecionados
+  // Montagem dos dias selecionados
   useEffect(() => {
     setDias((prev) => {
       const selectedKeys = new Set(selectedDates.map(toKey));
@@ -171,16 +181,15 @@ export default function TelaSupervisao({ onVoltar }: Props) {
       dias,
       observacao,
       dataEnvio: new Date().toISOString(),
-      status: "Encaminhada",
+      status: "Pendente",
       origem: "Supervisão",
       anexo: anexo || undefined,
-      numeroSolicitacao: numeroSolicitacao,
+      numeroSolicitacao,
     };
 
-    const novas = [...solicitacoes, nova];
-    atualizarLocalStorage(novas);
+    atualizarLocalStorage([...solicitacoes, nova]);
 
-    // reset
+    // reset form
     setCriando(false);
     setSolicitante("");
     setSelectedDates([]);
@@ -189,6 +198,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
     setTiposAgenda([]);
   }
 
+  // Filtros
   function limparFiltros() {
     setBusca("");
     setFiltroOrigem("Todos");
@@ -199,7 +209,6 @@ export default function TelaSupervisao({ onVoltar }: Props) {
     setFiltroAgenda("Todos");
   }
 
-  // FILTROS
   const solicitacoesFiltradas = useMemo(() => {
     return solicitacoes.filter((s) => {
       const matchNome = s.solicitante.toLowerCase().includes(busca.toLowerCase());
@@ -208,12 +217,16 @@ export default function TelaSupervisao({ onVoltar }: Props) {
       const matchTipo =
         filtroTipo === "Todos" || s.dias.some((d) => d.tipo === filtroTipo);
       const matchAgenda =
-        filtroAgenda === "Todos" ||
-        s.tiposAgenda?.includes(filtroAgenda);
+        filtroAgenda === "Todos" || s.tiposAgenda?.includes(filtroAgenda);
 
       const dataEnvio = new Date(s.dataEnvio);
-      const inicioDate = filtroInicio ? new Date(`${filtroInicio}T00:00:00`) : null;
-      const fimDate = filtroFim ? new Date(`${filtroFim}T23:59:59`) : null;
+
+      const inicioDate = filtroInicio
+        ? new Date(`${filtroInicio}T00:00:00`)
+        : null;
+      const fimDate = filtroFim
+        ? new Date(`${filtroFim}T23:59:59`)
+        : null;
 
       let matchPeriodo = true;
       if (inicioDate && fimDate)
@@ -248,6 +261,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
         <h1 className="text-2xl font-bold text-gray-800">
           Supervisão — Solicitações Médicas
         </h1>
+
         <div className="flex gap-3">
           <Button color="primary" onClick={() => setCriando(!criando)}>
             {criando ? "Cancelar" : "+ Nova Solicitação"}
@@ -283,13 +297,14 @@ export default function TelaSupervisao({ onVoltar }: Props) {
         />
       )}
 
-      {/* Campo com número da solicitação */}
+      {/* Nº Solicitação ao criar */}
       {criando && (
         <div className="flex items-center justify-between mb-4">
           <div>
             <label className="block font-medium text-gray-700">
               Nº da Solicitação
             </label>
+
             <input
               type="text"
               value={numeroSolicitacao}
@@ -297,21 +312,21 @@ export default function TelaSupervisao({ onVoltar }: Props) {
               className="border rounded-lg px-3 py-2 w-40 bg-gray-100 font-semibold text-hsmBlue"
             />
           </div>
+
           <div className="text-right text-sm text-gray-500">
             {new Date().toLocaleDateString("pt-BR")}
           </div>
         </div>
       )}
 
-      {/* ----------------------------- */}
-      {/* Formulário de criação         */}
-      {/* ----------------------------- */}
+      {/* Formulário */}
       {criando ? (
         <form onSubmit={handleCriarSolicitacao} className="space-y-6">
           <div>
             <label className="block font-medium mb-1">
               Médico Solicitante
             </label>
+
             <input
               type="text"
               value={solicitante}
@@ -322,9 +337,10 @@ export default function TelaSupervisao({ onVoltar }: Props) {
             />
           </div>
 
-          {/* Tipo de agenda */}
+          {/* Checkbox Tipo Agenda */}
           <div>
             <label className="block font-medium mb-1">Tipo de Agenda</label>
+
             <div className="flex gap-6 items-center">
               <label className="inline-flex items-center gap-2">
                 <input
@@ -358,11 +374,12 @@ export default function TelaSupervisao({ onVoltar }: Props) {
             </div>
           </div>
 
-          {/* DiaPicker */}
+          {/* Calendário */}
           <div className="border rounded-xl p-4 bg-gray-50">
             <h2 className="font-semibold text-gray-800 mb-3">
               Selecionar dias
             </h2>
+
             <DayPicker
               mode="multiple"
               selected={selectedDates}
@@ -378,12 +395,13 @@ export default function TelaSupervisao({ onVoltar }: Props) {
             />
           </div>
 
-          {/* Lista interna dos dias selecionados */}
+          {/* Dias selecionados */}
           {dias.length > 0 && (
             <div className="border rounded-xl p-4 bg-white shadow-sm">
               <h2 className="font-semibold mb-3 text-gray-800">
                 Dias selecionados
               </h2>
+
               {dias.map((dia, i) => (
                 <div
                   key={i}
@@ -395,6 +413,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                     readOnly
                     className="border rounded-lg px-2 py-2 w-full sm:w-1/3 bg-gray-100"
                   />
+
                   <input
                     type="time"
                     value={dia.inicio}
@@ -407,6 +426,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                     }
                     className="border rounded-lg px-2 py-2 w-full sm:w-1/3"
                   />
+
                   <select
                     value={dia.tipo}
                     onChange={(e) =>
@@ -429,6 +449,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
           {/* Observação */}
           <div>
             <label className="block font-medium mb-1">Observação</label>
+
             <textarea
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
@@ -440,6 +461,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
           {/* Anexo */}
           <div>
             <label className="block font-medium mb-1">Anexo (opcional)</label>
+
             <input
               type="file"
               accept="image/*,.pdf"
@@ -458,7 +480,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
           Nenhuma solicitação encontrada.
         </p>
       ) : (
-        // Lista dos cards
+        // LISTA DE SOLICITAÇÕES
         solicitacoesFiltradas.map((sol, indexFiltrado) => {
           const indexGlobal = solicitacoes.indexOf(sol);
 
@@ -467,7 +489,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
               key={indexGlobal}
               className="border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 transition-all"
             >
-              {/* Cabeçalho do card */}
+              {/* CARD HEADER */}
               <div
                 className="flex justify-between items-center cursor-pointer select-none"
                 onClick={() =>
@@ -492,13 +514,13 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                     })}
                   </p>
 
-                  {/* Tipo agenda */}
+                  {/* Tipo Agenda */}
                   <p className="text-sm text-gray-700 mt-1">
                     <strong>Tipo de Agenda:</strong>{" "}
-                    {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
+                    {sol.tiposAgenda?.join(" + ")}
                   </p>
 
-                  {/* 🔥 Número da solicitação */}
+                  {/* Número da Solicitação */}
                   {sol.numeroSolicitacao && (
                     <p className="text-sm text-gray-600 mt-1">
                       <strong>Nº Solicitação:</strong>{" "}
@@ -514,6 +536,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                     <span>
                       {expanded[indexFiltrado] ? "Recolher" : "Ver detalhes"}
                     </span>
+
                     <span
                       className={`transform transition-transform duration-300 ${
                         expanded[indexFiltrado] ? "rotate-180" : ""
@@ -525,7 +548,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                 </div>
               </div>
 
-              {/* Detalhes */}
+              {/* DETALHES */}
               <div
                 className={`transition-all duration-500 ease-in-out overflow-hidden ${
                   expanded[indexFiltrado]
@@ -546,6 +569,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                             locale: ptBR,
                           })}
                         </span>
+
                         <span>
                           {d.tipo} — {d.inicio}
                         </span>
@@ -554,12 +578,14 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                   </ul>
                 </div>
 
+                {/* Observação do médico */}
                 {sol.observacao && (
                   <p className="text-sm text-gray-500 italic mb-3">
                     Observação: "{sol.observacao}"
                   </p>
                 )}
 
+                {/* Anexo */}
                 {sol.anexo && (
                   <a
                     href={sol.anexo}
@@ -570,7 +596,7 @@ export default function TelaSupervisao({ onVoltar }: Props) {
                   </a>
                 )}
 
-                {/* Campo observação da supervisão */}
+                {/* Observação da supervisão */}
                 <textarea
                   value={sol.obsSupervisao || ""}
                   onChange={(e) =>
