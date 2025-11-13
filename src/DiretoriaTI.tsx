@@ -393,28 +393,39 @@ export default function DiretoriaTI({ onVoltar }: Props) {
 
                 {/* Ações */}
                 <div className="flex flex-wrap gap-3 justify-end">
-                  {!sol.responsavelTI && (
-                    <button
-                      onClick={() => handlePegar(index)}
-                      className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
-                    >
-                      🤝 Pegar para mim
-                    </button>
-                  )}
 
-                  {sol.responsavelTI === usuarioTI && (
-                    <select
-                      value={sol.status}
-                      onChange={(e) => handleStatusChange(index, e.target.value as any)}
-                      className="border rounded-lg px-3 py-2"
-                    >
-                      <option value="Encaminhada">Encaminhada</option>
-                      <option value="Aprovada">Aprovada</option>
-                      <option value="Recusada">Recusada</option>
-                      <option value="Concluída">Concluída</option>
-                    </select>
-                  )}
-                </div>
+  {/* Botão "Pegar para mim" → só aparece quando:
+      - status é APROVADA
+      - e não há responsável ainda
+  */}
+  {sol.status === "Aprovada" && !sol.responsavelTI && (
+    <button
+      onClick={() => handlePegar(index)}
+      className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
+    >
+      🤝 Pegar para mim
+    </button>
+  )}
+
+  {/* SELECT para alterar status:
+      - só aparece se o usuário TI for o responsável
+      - ou se o status NÃO for mais "Aprovada"
+  */}
+  {(sol.responsavelTI === usuarioTI || sol.status !== "Aprovada") && (
+    <select
+      value={sol.status}
+      onChange={(e) => handleStatusChange(index, e.target.value as any)}
+      className="border rounded-lg px-3 py-2"
+    >
+      <option value="Encaminhada">Encaminhada</option>
+      <option value="Aprovada">Aprovada</option>
+      <option value="Recusada">Recusada</option>
+      <option value="Concluída">Concluída</option>
+    </select>
+  )}
+
+</div>
+
               </div>
             </div>
           ))

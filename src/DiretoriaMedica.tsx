@@ -18,6 +18,7 @@ interface Solicitacao {
   status: "Encaminhada" | "Aprovada" | "Recusada" | "Concluída";
   origem: "Médico" | "Supervisão";
   anexo?: string;
+  NumeroSolicitacao?: string; 
 }
 
 interface Props {
@@ -41,9 +42,22 @@ export default function DiretoriaMedica({ onVoltar }: Props) {
   const [filtroFim, setFiltroFim] = useState<string>("");
 
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem("solicitacoes") || "[]");
-    setSolicitacoes(data.filter((s: any) => s.status !== "Pendente"));
-  }, []);
+  const data = JSON.parse(localStorage.getItem("solicitacoes") || "[]");
+
+  // 🔥 GERA NÚMERO PARA SOLICITAÇÕES ANTIGAS
+  data.forEach((s: any, index: number) => {
+    if (!s.NumeroSolicitacao) {
+      const ano = new Date(s.dataEnvio).getFullYear();
+      s.NumeroSolicitacao = `${index + 1}/${ano}`;
+    }
+  });
+
+  localStorage.setItem("solicitacoes", JSON.stringify(data));
+
+  // Diretoria vê apenas solicitações != Pendente
+  setSolicitacoes(data.filter((s: any) => s.status !== "Pendente"));
+}, []);
+
 
   function atualizarLocalStorage(lista: Solicitacao[]) {
     setSolicitacoes(lista);
@@ -114,6 +128,8 @@ function recusarSelecionadas() {
   ) {
     return;
   }
+
+  
 
   const novas = [...solicitacoes];
   selecionadas.forEach((i) => {
@@ -345,6 +361,12 @@ function recusarSelecionadas() {
                         <strong>Tipo de Agenda:</strong>{" "}
                         {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
                       </p>
+                      {sol.NumeroSolicitacao && (
+    <p className="text-sm text-gray-600 mt-1">
+      <strong>Nº Solicitação:</strong> {sol.NumeroSolicitacao}
+    </p>
+  )}
+
                     </div>
                   </div>
 
