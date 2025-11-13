@@ -3,6 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+import Screen from "./ui/Screen";
+import { Button } from "./ui/Button";
+import { StatusBadge } from "./ui/Badge";
+import FiltroSolicitacoes from "./FiltroSolicitacoes";
+
 import {
   Solicitacao,
   StatusSolicitacao,
@@ -17,11 +22,12 @@ interface Props {
 export default function TelaAprovacao({ onVoltar }: Props) {
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
-  const [selecionadas, setSelecionadas] = useState<number[]>([]);
+  const [selecionadas, setSelecionadas] = useState<number[]>([]); // índices globais
 
   // filtros
   const [busca, setBusca] = useState("");
-  const [filtroOrigem, setFiltroOrigem] = useState<"Todos" | "Médico" | "Supervisão">("Todos");
+  const [filtroOrigem, setFiltroOrigem] =
+    useState<"Todos" | "Médico" | "Supervisão">("Todos");
   const [filtroTipo, setFiltroTipo] = useState<"Todos" | TipoDia>("Todos");
   const [filtroAgenda, setFiltroAgenda] =
     useState<"Todos" | TipoAgendaSimples>("Todos");
@@ -35,8 +41,7 @@ export default function TelaAprovacao({ onVoltar }: Props) {
     const data: Solicitacao[] = JSON.parse(
       localStorage.getItem("solicitacoes") || "[]"
     );
-
-    // Diretoria não vê pendentes
+    // Diretoria não vê as pendentes
     setSolicitacoes(data.filter((s) => s.status !== "Pendente"));
   }, []);
 
@@ -47,14 +52,16 @@ export default function TelaAprovacao({ onVoltar }: Props) {
 
   function handleAprovar(indexGlobal: number) {
     const novas = [...solicitacoes];
-    if (novas[indexGlobal].status !== "Encaminhada") return;
+    if (!novas[indexGlobal] || novas[indexGlobal].status !== "Encaminhada")
+      return;
     novas[indexGlobal].status = "Aprovada";
     atualizarLocalStorage(novas);
   }
 
   function handleRecusar(indexGlobal: number) {
     const novas = [...solicitacoes];
-    if (novas[indexGlobal].status !== "Encaminhada") return;
+    if (!novas[indexGlobal] || novas[indexGlobal].status !== "Encaminhada")
+      return;
     novas[indexGlobal].status = "Recusada";
     atualizarLocalStorage(novas);
   }
@@ -70,7 +77,7 @@ export default function TelaAprovacao({ onVoltar }: Props) {
     setSelecionadas([]);
   }
 
-  // Seleção múltipla
+  // seleção múltipla sempre guardando índice global
   function toggleSelecionada(indexGlobal: number) {
     setSelecionadas((prev) =>
       prev.includes(indexGlobal)
@@ -80,46 +87,66 @@ export default function TelaAprovacao({ onVoltar }: Props) {
   }
 
   function selecionarTodas() {
-    const indexes = solicitacoesFiltradas.map((sol) =>
+    const indicesNaTela = solicitacoesFiltradas.map((sol) =>
       solicitacoes.indexOf(sol)
     );
-    const todasJa = indexes.every((i) => selecionadas.includes(i));
+    const todasJa = indicesNaTela.every((i) => selecionadas.includes(i));
 
-    setSelecionadas(todasJa ? [] : indexes);
+    if (todasJa) {
+      setSelecionadas([]);
+    } else {
+      setSelecionadas(indicesNaTela);
+    }
   }
 
   function aprovarSelecionadas() {
-    if (!window.confirm("Confirmar aprovação das solicitações selecionadas?"))
+    if (
+      !window.confirm(
+        "Tem certeza que deseja aprovar as solicitações selecionadas?"
+      )
+    ) {
       return;
+    }
 
     const novas = [...solicitacoes];
     selecionadas.forEach((i) => {
-      if (novas[i].status === "Encaminhada") novas[i].status = "Aprovada";
+      if (novas[i]?.status === "Encaminhada") {
+        novas[i].status = "Aprovada";
+      }
     });
-
     atualizarLocalStorage(novas);
     setSelecionadas([]);
   }
 
   function recusarSelecionadas() {
-    if (!window.confirm("Confirmar recusa das solicitações selecionadas?"))
+    if (
+      !window.confirm(
+        "Tem certeza que deseja recusar as solicitações selecionadas?"
+      )
+    ) {
       return;
+    }
 
     const novas = [...solicitacoes];
     selecionadas.forEach((i) => {
-      if (novas[i].status === "Encaminhada") novas[i].status = "Recusada";
+      if (novas[i]?.status === "Encaminhada") {
+        novas[i].status = "Recusada";
+      }
     });
-
     atualizarLocalStorage(novas);
     setSelecionadas([]);
   }
 
-  // FILTROS CORRIGIDOS COM 23:59:59
+  // filtros
   const solicitacoesFiltradas = useMemo(() => {
     return solicitacoes.filter((s) => {
-      const matchNome = s.solicitante.toLowerCase().includes(busca.toLowerCase());
-      const matchOrigem = filtroOrigem === "Todos" || s.origem === filtroOrigem;
-      const matchStatus = filtroStatus === "Todos" || s.status === filtroStatus;
+      const matchNome = s.solicitante
+        .toLowerCase()
+        .includes(busca.toLowerCase());
+      const matchOrigem =
+        filtroOrigem === "Todos" || s.origem === filtroOrigem;
+      const matchStatus =
+        filtroStatus === "Todos" || s.status === filtroStatus;
       const matchTipo =
         filtroTipo === "Todos" || s.dias.some((d) => d.tipo === filtroTipo);
       const matchAgenda =
@@ -127,13 +154,17 @@ export default function TelaAprovacao({ onVoltar }: Props) {
         (s.tiposAgenda?.includes(filtroAgenda) ?? s.tipoAgenda === filtroAgenda);
 
       const dataEnvio = new Date(s.dataEnvio);
-      const inicio = filtroInicio ? new Date(filtroInicio + "T00:00:00") : null;
-      const fim = filtroFim ? new Date(filtroFim + "T23:59:59") : null;
-
+      const inicioDate = filtroInicio
+        ? new Date(`${filtroInicio}T00:00:00`)
+        : null;
+      const fimDate = filtroFim
+        ? new Date(`${filtroFim}T23:59:59`)
+        : null;
       let matchPeriodo = true;
-      if (inicio && fim) matchPeriodo = dataEnvio >= inicio && dataEnvio <= fim;
-      else if (inicio) matchPeriodo = dataEnvio >= inicio;
-      else if (fim) matchPeriodo = dataEnvio <= fim;
+      if (inicioDate && fimDate)
+        matchPeriodo = dataEnvio >= inicioDate && dataEnvio <= fimDate;
+      else if (inicioDate) matchPeriodo = dataEnvio >= inicioDate;
+      else if (fimDate) matchPeriodo = dataEnvio <= fimDate;
 
       return (
         matchNome &&
@@ -168,326 +199,214 @@ export default function TelaAprovacao({ onVoltar }: Props) {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-hsmBlue/90 to-hsmCyan/30 p-8">
-      <div className="bg-white shadow-xl rounded-2xl p-8 max-w-6xl mx-auto">
-        
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Diretoria Médica — Aprovação de Solicitações
-          </h1>
+    <Screen>
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">
+          Diretoria Médica — Aprovação de Solicitações
+        </h1>
+        <button
+          onClick={onVoltar}
+          className="text-hsmBlue hover:underline text-sm"
+        >
+          ← Voltar
+        </button>
+      </div>
 
-          <button
-            onClick={onVoltar}
-            className="text-hsmBlue hover:underline text-sm"
-          >
-            ← Voltar
-          </button>
+      {/* Filtros */}
+      <FiltroSolicitacoes
+        busca={busca}
+        setBusca={setBusca}
+        filtroOrigem={filtroOrigem}
+        setFiltroOrigem={setFiltroOrigem}
+        filtroTipo={filtroTipo}
+        setFiltroTipo={setFiltroTipo}
+        filtroAgenda={filtroAgenda}
+        setFiltroAgenda={setFiltroAgenda}
+        filtroStatus={filtroStatus}
+        setFiltroStatus={setFiltroStatus}
+        filtroInicio={filtroInicio}
+        setFiltroInicio={setFiltroInicio}
+        filtroFim={filtroFim}
+        setFiltroFim={setFiltroFim}
+        onLimpar={limparFiltros}
+      />
+
+      {/* Ações em massa */}
+      {solicitacoesFiltradas.length > 0 && (
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={todasSelecionadasNaTela}
+              onChange={selecionarTodas}
+            />
+            <span className="text-sm text-gray-700">Selecionar todas</span>
+          </div>
+
+          {podeAcoesEmMassa && (
+            <div className="flex gap-3">
+              <Button color="green" onClick={aprovarSelecionadas}>
+                ✅ Aprovar selecionadas
+              </Button>
+
+              <Button color="red" onClick={recusarSelecionadas}>
+                ❌ Recusar selecionadas
+              </Button>
+            </div>
+          )}
         </div>
+      )}
 
-        {/* Filtros */}
-        <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-            
-            <div className="col-span-2">
-              <label className="text-sm font-medium text-gray-700">
-                Buscar por médico
-              </label>
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Digite o nome"
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
+      {/* Listagem */}
+      {solicitacoesFiltradas.length === 0 ? (
+        <p className="text-gray-500 text-center">
+          Nenhuma solicitação encontrada.
+        </p>
+      ) : (
+        solicitacoesFiltradas.map((sol, indexFiltrado) => {
+          const indexGlobal = solicitacoes.indexOf(sol);
+          const selecionada = selecionadas.includes(indexGlobal);
 
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Origem
-              </label>
-              <select
-                value={filtroOrigem}
-                onChange={(e) => setFiltroOrigem(e.target.value as any)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option>Todos</option>
-                <option>Médico</option>
-                <option>Supervisão</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Tipo
-              </label>
-              <select
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value as any)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option>Todos</option>
-                <option>Abertura</option>
-                <option>Fechamento</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Tipo de Agenda
-              </label>
-              <select
-                value={filtroAgenda}
-                onChange={(e) => setFiltroAgenda(e.target.value as any)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option>Todos</option>
-                <option>Convênio</option>
-                <option>HSM+</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Status
-              </label>
-              <select
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value as any)}
-                className="w-full border rounded-lg px-3 py-2"
-              >
-                <option>Encaminhada</option>
-                <option>Aprovada</option>
-                <option>Recusada</option>
-                <option>Concluída</option>
-                <option>Todos</option>
-              </select>
-            </div>
-          </div>
-
-          {/* período */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                De
-              </label>
-              <input
-                type="date"
-                value={filtroInicio}
-                onChange={(e) => setFiltroInicio(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Até
-              </label>
-              <input
-                type="date"
-                value={filtroFim}
-                onChange={(e) => setFiltroFim(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end mt-3">
-            <button
-              onClick={limparFiltros}
-              className="text-sm text-red-500 hover:underline"
+          return (
+            <div
+              key={indexGlobal}
+              className={`border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 transition-all ${
+                selecionada ? "ring-2 ring-hsmBlue" : ""
+              }`}
             >
-              Limpar Filtros
-            </button>
-          </div>
-        </div>
-
-        {/* ações em massa */}
-        {solicitacoesFiltradas.length > 0 && (
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={todasSelecionadasNaTela}
-                onChange={selecionarTodas}
-              />
-              <span className="text-sm">Selecionar todas</span>
-            </div>
-
-            {podeAcoesEmMassa && (
-              <div className="flex gap-3">
-                <button
-                  onClick={aprovarSelecionadas}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg"
-                >
-                  Aprovar selecionadas
-                </button>
-
-                <button
-                  onClick={recusarSelecionadas}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg"
-                >
-                  Recusar selecionadas
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* lista */}
-        {solicitacoesFiltradas.length === 0 ? (
-          <p className="text-center text-gray-500">
-            Nenhuma solicitação encontrada.
-          </p>
-        ) : (
-          solicitacoesFiltradas.map((sol, indexFiltrado) => {
-            const indexGlobal = solicitacoes.indexOf(sol);
-            const selecionada = selecionadas.includes(indexGlobal);
-
-            return (
-              <div
-                key={indexGlobal}
-                className={`border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 ${
-                  selecionada ? "ring-2 ring-hsmBlue" : ""
-                }`}
-              >
-                {/* header */}
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selecionada}
-                      onChange={() => toggleSelecionada(indexGlobal)}
-                    />
-
-                    <div>
-                      <h2 className="font-semibold text-hsmBlue text-lg">
-                        {sol.solicitante}
-                      </h2>
-
-                      <p className="text-sm text-gray-500">
-                        {sol.origem === "Supervisão"
-                          ? "🧾 Inserido pela supervisão"
-                          : "🩺 Enviado pelo médico"}{" "}
-                        em{" "}
-                        {format(new Date(sol.dataEnvio), "dd/MM/yyyy HH:mm", {
-                          locale: ptBR,
-                        })}
+              {/* Cabeçalho do card */}
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selecionada}
+                    onChange={() => toggleSelecionada(indexGlobal)}
+                  />
+                  <div>
+                    <h2 className="font-semibold text-hsmBlue text-lg">
+                      {sol.solicitante}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {sol.origem === "Supervisão"
+                        ? "🧾 Inserido pela supervisão"
+                        : "🩺 Enviado pelo médico"}{" "}
+                      em{" "}
+                      {format(new Date(sol.dataEnvio), "dd/MM/yyyy HH:mm", {
+                        locale: ptBR,
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-700 mt-1">
+                      <strong>Tipo de Agenda:</strong>{" "}
+                      {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
+                    </p>
+                    {sol.numeroSolicitacao && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        <strong>Nº Solicitação:</strong>{" "}
+                        {sol.numeroSolicitacao}
                       </p>
-
-                      <p className="text-sm text-gray-700 mt-1">
-                        <strong>Agenda:</strong>{" "}
-                        {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
-                      </p>
-
-                      {sol.NumeroSolicitacao && (
-                        <p className="text-sm text-gray-700 mt-1">
-                          <strong>Nº Solicitação:</strong>{" "}
-                          {sol.NumeroSolicitacao}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm ${
-                        sol.status === "Encaminhada"
-                          ? "bg-blue-100 text-blue-700"
-                          : sol.status === "Aprovada"
-                          ? "bg-green-100 text-green-700"
-                          : sol.status === "Recusada"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-200 text-gray-700"
-                      }`}
-                    >
-                      {sol.status}
-                    </span>
-
-                    <button
-                      onClick={() =>
-                        setExpanded((prev) => ({
-                          ...prev,
-                          [indexFiltrado]: !prev[indexFiltrado],
-                        }))
-                      }
-                      className="text-sm text-hsmBlue hover:underline"
-                    >
-                      {expanded[indexFiltrado] ? "Recolher ▲" : "Ver detalhes ▼"}
-                    </button>
+                    )}
                   </div>
                 </div>
 
-                {/* detalhes */}
-                {expanded[indexFiltrado] && (
-                  <div className="mt-4">
-                    <div className="border bg-white p-3 rounded-lg mb-3">
-                      <h3 className="font-medium mb-2 text-gray-700">
-                        Dias e horários:
-                      </h3>
-
-                      <ul className="text-sm text-gray-700 space-y-1">
-                        {sol.dias.map((d, i) => (
-                          <li key={i} className="flex justify-between">
-                            <span>
-                              {format(new Date(d.data), "dd/MM/yyyy", {
-                                locale: ptBR,
-                              })}
-                            </span>
-                            <span>
-                              {d.tipo} — {d.inicio}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {sol.observacao && (
-                      <p className="text-sm italic text-gray-500 mb-3">
-                        Observação do médico: "{sol.observacao}"
-                      </p>
-                    )}
-
-                    {sol.anexo && (
-                      <a
-                        href={sol.anexo}
-                        target="_blank"
-                        className="underline text-hsmBlue text-sm block mb-3"
-                      >
-                        📎 Ver anexo
-                      </a>
-                    )}
-
-                    <div className="flex justify-end gap-3">
-                      {sol.status === "Encaminhada" ? (
-                        <>
-                          <button
-                            onClick={() => handleAprovar(indexGlobal)}
-                            className="bg-green-600 text-white px-4 py-2 rounded-lg"
-                          >
-                            Aprovar
-                          </button>
-
-                          <button
-                            onClick={() => handleRecusar(indexGlobal)}
-                            className="bg-red-600 text-white px-4 py-2 rounded-lg"
-                          >
-                            Recusar
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-gray-500 text-sm italic">
-                          (Sem ações — já finalizada)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={sol.status} />
+                  <button
+                    className="text-sm text-hsmBlue hover:underline flex items-center gap-1"
+                    onClick={() =>
+                      setExpanded((prev) => ({
+                        ...prev,
+                        [indexFiltrado]: !prev[indexFiltrado],
+                      }))
+                    }
+                  >
+                    <span>
+                      {expanded[indexFiltrado] ? "Recolher" : "Ver detalhes"}
+                    </span>
+                    <span
+                      className={`transform transition-transform duration-300 ${
+                        expanded[indexFiltrado] ? "rotate-180" : ""
+                      }`}
+                    >
+                      ▼
+                    </span>
+                  </button>
+                </div>
               </div>
-            );
-          })
-        )}
-      </div>
-    </div>
+
+              {/* Detalhes */}
+              <div
+                className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                  expanded[indexFiltrado]
+                    ? "max-h-[1000px] opacity-100 mt-4"
+                    : "max-h-0 opacity-0"
+                }`}
+              >
+                <div className="border rounded-lg bg-white p-3 mb-3">
+                  <h3 className="font-medium mb-2 text-gray-700">
+                    Dias e horários:
+                  </h3>
+                  <ul className="text-sm text-gray-600 space-y-1">
+                    {sol.dias.map((d, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>
+                          {format(new Date(d.data), "dd/MM/yyyy", {
+                            locale: ptBR,
+                          })}
+                        </span>
+                        <span>
+                          {d.tipo} — {d.inicio}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {sol.observacao && (
+                  <p className="text-sm text-gray-500 italic mb-3">
+                    Observação: “{sol.observacao}”
+                  </p>
+                )}
+
+                {sol.anexo && (
+                  <a
+                    href={sol.anexo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-hsmBlue text-sm underline block mb-3"
+                  >
+                    📎 Ver Anexo
+                  </a>
+                )}
+
+                {/* Ações individuais */}
+                <div className="flex justify-end gap-3">
+                  {sol.status === "Encaminhada" ? (
+                    <>
+                      <Button
+                        color="green"
+                        onClick={() => handleAprovar(indexGlobal)}
+                      >
+                        ✅ Aprovar
+                      </Button>
+                      <Button
+                        color="red"
+                        onClick={() => handleRecusar(indexGlobal)}
+                      >
+                        ❌ Recusar
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-sm text-gray-500 italic">
+                      Status: {sol.status} — sem ações disponíveis
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </Screen>
   );
 }

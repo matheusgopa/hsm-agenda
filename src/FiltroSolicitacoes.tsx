@@ -1,5 +1,6 @@
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
+import React from "react";
 
 interface Props {
   busca: string;
@@ -49,22 +50,28 @@ export default function FiltroSolicitacoes(props: Props) {
     <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
       <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
 
+        {/* Buscar */}
         <div className="col-span-2">
           <label className="text-sm font-medium text-gray-700">
             Buscar por médico
           </label>
           <Input
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setBusca(e.target.value)
+            }
             placeholder="Digite o nome"
           />
         </div>
 
+        {/* Origem */}
         <div>
           <label className="text-sm font-medium text-gray-700">Origem</label>
           <Select
             value={filtroOrigem}
-            onChange={(e) => setFiltroOrigem(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFiltroOrigem(e.target.value)
+            }
           >
             <option>Todos</option>
             <option>Médico</option>
@@ -72,11 +79,14 @@ export default function FiltroSolicitacoes(props: Props) {
           </Select>
         </div>
 
+        {/* Tipo */}
         <div>
           <label className="text-sm font-medium text-gray-700">Tipo</label>
           <Select
             value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFiltroTipo(e.target.value)
+            }
           >
             <option>Todos</option>
             <option>Abertura</option>
@@ -84,13 +94,16 @@ export default function FiltroSolicitacoes(props: Props) {
           </Select>
         </div>
 
+        {/* Tipo de Agenda */}
         <div>
           <label className="text-sm font-medium text-gray-700">
             Tipo de Agenda
           </label>
           <Select
             value={filtroAgenda}
-            onChange={(e) => setFiltroAgenda(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFiltroAgenda(e.target.value)
+            }
           >
             <option>Todos</option>
             <option>Convênio</option>
@@ -98,11 +111,14 @@ export default function FiltroSolicitacoes(props: Props) {
           </Select>
         </div>
 
+        {/* Status */}
         <div>
           <label className="text-sm font-medium text-gray-700">Status</label>
           <Select
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFiltroStatus(e.target.value)
+            }
           >
             <option>Pendente</option>
             <option>Encaminhada</option>
@@ -121,7 +137,9 @@ export default function FiltroSolicitacoes(props: Props) {
           <Input
             type="date"
             value={filtroInicio}
-            onChange={(e) => setFiltroInicio(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setFiltroInicio(e.target.value)
+            }
           />
         </div>
         <div>
@@ -129,13 +147,18 @@ export default function FiltroSolicitacoes(props: Props) {
           <Input
             type="date"
             value={filtroFim}
-            onChange={(e) => setFiltroFim(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setFiltroFim(e.target.value)
+            }
           />
         </div>
       </div>
 
       <div className="flex justify-end mt-3">
-        <button onClick={onLimpar} className="text-sm text-red-500 hover:underline">
+        <button
+          onClick={onLimpar}
+          className="text-sm text-red-500 hover:underline"
+        >
           Limpar Filtros
         </button>
       </div>

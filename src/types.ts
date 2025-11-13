@@ -45,7 +45,7 @@ export interface Solicitacao {
   anexo?: string;
 
   // Número único "N/AAAA"
-  NumeroSolicitacao?: string;
+  numeroSolicitacao?: string;
 
   // Campos usados na TI
   responsavelTI?: string;
