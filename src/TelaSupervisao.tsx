@@ -1,32 +1,17 @@
+// src/TelaSupervisao.tsx
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
-interface Dia {
-  data: string;
-  inicio: string;
-  tipo: string;
-}
-
-interface Solicitacao {
-  solicitante: string;
-  tipoAgenda: string;
-  tiposAgenda?: Array<"Convênio" | "HSM+">;
-  dias: Dia[];
-  observacao: string;
-  dataEnvio: string;
-  status: "Pendente" | "Encaminhada" | "Aprovada" | "Recusada";
-  origem: "Médico" | "Supervisão";
-  obsSupervisao?: string;
-  anexo?: string;
-  NumeroSolicitacao?: string;
-}
-
-interface Props {
-  onVoltar: () => void;
-}
+import {
+  Dia,
+  Solicitacao,
+  StatusSolicitacao,
+  TipoAgendaSimples,
+  TipoDia,
+} from "./types";
 
 function toKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -40,13 +25,16 @@ function fromKey(key: string) {
   return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
 
-export default function Supervisao({ onVoltar }: Props) {
+interface Props {
+  onVoltar: () => void;
+}
+
+export default function TelaSupervisao({ onVoltar }: Props) {
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [criando, setCriando] = useState(false);
+
   const [solicitante, setSolicitante] = useState("");
-  const [tiposAgenda, setTiposAgenda] = useState<Array<"Convênio" | "HSM+">>(
-    []
-  );
+  const [tiposAgenda, setTiposAgenda] = useState<TipoAgendaSimples[]>([]);
   const [dias, setDias] = useState<Dia[]>([]);
   const [selectedDates, setSelectedDates] = useState<Date[]>([]);
   const [observacao, setObservacao] = useState("");
@@ -54,25 +42,24 @@ export default function Supervisao({ onVoltar }: Props) {
   const [numeroSolicitacao, setNumeroSolicitacao] = useState("");
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
-  // filtros
+  // 🔎 filtros
   const [busca, setBusca] = useState("");
-  const [filtroOrigem, setFiltroOrigem] = useState<
-    "Todos" | "Médico" | "Supervisão"
-  >("Todos");
-  const [filtroTipo, setFiltroTipo] = useState<
-    "Todos" | "Abertura" | "Fechamento"
-  >("Todos");
-  const [filtroStatus, setFiltroStatus] = useState<
-    "Todos" | "Pendente" | "Encaminhada" | "Aprovada" | "Recusada" | "Concluída"
-  >("Pendente");
-  const [filtroInicio, setFiltroInicio] = useState<string>("");
-  const [filtroFim, setFiltroFim] = useState<string>("");
-  const [filtroAgenda, setFiltroAgenda] = useState<
-    "Todos" | "Convênio" | "HSM+"
-  >("Todos");
+  const [filtroOrigem, setFiltroOrigem] =
+    useState<"Todos" | "Médico" | "Supervisão">("Todos");
+  const [filtroTipo, setFiltroTipo] = useState<"Todos" | TipoDia>("Todos");
+  const [filtroStatus, setFiltroStatus] =
+    useState<StatusSolicitacao | "Todos">("Pendente");
+  const [filtroInicio, setFiltroInicio] = useState("");
+  const [filtroFim, setFiltroFim] = useState("");
+  const [filtroAgenda, setFiltroAgenda] =
+    useState<"Todos" | TipoAgendaSimples>("Todos");
 
+  // 🔁 Carregar solicitações
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem("solicitacoes") || "[]");
+    const data: Solicitacao[] = JSON.parse(
+      localStorage.getItem("solicitacoes") || "[]"
+    );
+
     data.forEach((s: any) => {
       if (!s.status) s.status = "Pendente";
       if (!s.origem) s.origem = "Médico";
@@ -80,6 +67,7 @@ export default function Supervisao({ onVoltar }: Props) {
       if (!s.tiposAgenda)
         s.tiposAgenda = s.tipoAgenda.split("+").map((t: string) => t.trim());
     });
+
     localStorage.setItem("solicitacoes", JSON.stringify(data));
     setSolicitacoes(data);
   }, []);
@@ -89,15 +77,17 @@ export default function Supervisao({ onVoltar }: Props) {
     localStorage.setItem("solicitacoes", JSON.stringify(lista));
   }
 
-  function handleObsChange(index: number, valor: string) {
+  // ✔ OBSERVAÇÃO — sempre usando índice global
+  function handleObsChange(indexGlobal: number, valor: string) {
     const novas = [...solicitacoes];
-    novas[index].obsSupervisao = valor;
+    novas[indexGlobal].obsSupervisao = valor;
     atualizarLocalStorage(novas);
   }
 
-  function handleEncaminhar(index: number) {
+  // ✔ ENCAMINHAR — sempre usando índice global
+  function handleEncaminhar(indexGlobal: number) {
     const novas = [...solicitacoes];
-    novas[index].status = "Encaminhada";
+    novas[indexGlobal].status = "Encaminhada";
     atualizarLocalStorage(novas);
   }
 
@@ -109,45 +99,54 @@ export default function Supervisao({ onVoltar }: Props) {
     reader.readAsDataURL(file);
   }
 
+  // Atualiza lista de dias com base no calendário
   useEffect(() => {
     setDias((prev) => {
       const selectedKeys = new Set(selectedDates.map(toKey));
       let next = prev.filter((d) => selectedKeys.has(d.data));
       const existing = new Set(next.map((d) => d.data));
+
       selectedDates.forEach((date) => {
         const key = toKey(date);
         if (!existing.has(key)) {
           next.push({ data: key, inicio: "08:00", tipo: "Abertura" });
         }
       });
+
       next.sort((a, b) => a.data.localeCompare(b.data));
       return next;
     });
   }, [selectedDates]);
 
+  // Gera número da solicitação
   useEffect(() => {
-    if (criando) {
-      const anoAtual = new Date().getFullYear();
-      const ultima = localStorage.getItem("ultimoNumeroSolicitacao");
-      let novoNumero = 1;
-      if (ultima) {
-        const [num, ano] = ultima.split("/").map((v) => v.trim());
-        if (parseInt(ano) === anoAtual) novoNumero = parseInt(num) + 1;
+    if (!criando) return;
+
+    const anoAtual = new Date().getFullYear();
+    const ultima = localStorage.getItem("ultimoNumeroSolicitacao");
+
+    let novoNumero = 1;
+    if (ultima) {
+      const [num, ano] = ultima.split("/").map((v) => v.trim());
+      if (parseInt(ano) === anoAtual) {
+        novoNumero = parseInt(num) + 1;
       }
-      const numeroAtual = `${novoNumero}/${anoAtual}`;
-      setNumeroSolicitacao(numeroAtual);
-      localStorage.setItem("ultimoNumeroSolicitacao", numeroAtual);
     }
+
+    const numeroAtual = `${novoNumero}/${anoAtual}`;
+    setNumeroSolicitacao(numeroAtual);
+    localStorage.setItem("ultimoNumeroSolicitacao", numeroAtual);
   }, [criando]);
 
   function handleCriarSolicitacao(e: React.FormEvent) {
     e.preventDefault();
+
     if (!solicitante || dias.length === 0) {
       alert("Preencha o nome do médico e selecione pelo menos um dia.");
       return;
     }
     if (tiposAgenda.length === 0) {
-      alert("Selecione pelo menos um tipo de agenda (Convênio e/ou HSM+).");
+      alert("Selecione pelo menos um tipo de agenda.");
       return;
     }
 
@@ -158,7 +157,7 @@ export default function Supervisao({ onVoltar }: Props) {
       dias,
       observacao,
       dataEnvio: new Date().toISOString(),
-      status: "Encaminhada",
+      status: "Pendente",
       origem: "Supervisão",
       anexo: anexo || undefined,
       NumeroSolicitacao: numeroSolicitacao,
@@ -166,6 +165,7 @@ export default function Supervisao({ onVoltar }: Props) {
 
     const novas = [...solicitacoes, nova];
     atualizarLocalStorage(novas);
+
     setCriando(false);
     setSolicitante("");
     setSelectedDates([]);
@@ -184,26 +184,27 @@ export default function Supervisao({ onVoltar }: Props) {
     setFiltroAgenda("Todos");
   }
 
+  // FILTROS ✔
   const solicitacoesFiltradas = useMemo(() => {
     return solicitacoes.filter((s) => {
-      const matchNome = s.solicitante
-        .toLowerCase()
-        .includes(busca.toLowerCase());
+      const matchNome =
+        s.solicitante.toLowerCase().includes(busca.toLowerCase());
       const matchOrigem =
         filtroOrigem === "Todos" || s.origem === filtroOrigem;
       const matchStatus =
         filtroStatus === "Todos" || s.status === filtroStatus;
       const matchTipo =
-        filtroTipo === "Todos" ||
-        s.dias.some((d) => d.tipo === filtroTipo);
+        filtroTipo === "Todos" || s.dias.some((d) => d.tipo === filtroTipo);
       const matchAgenda =
         filtroAgenda === "Todos" ||
         (s.tiposAgenda?.includes(filtroAgenda) ??
           s.tipoAgenda === filtroAgenda);
 
       const dataEnvio = new Date(s.dataEnvio);
-      const inicio = filtroInicio ? new Date(filtroInicio) : null;
-      const fim = filtroFim ? new Date(filtroFim) : null;
+      const inicio = filtroInicio ? new Date(filtroInicio + "T00:00:00") : null;
+      const fim = filtroFim ? new Date(filtroFim + "T23:59:59") : null;
+
+
       let matchPeriodo = true;
       if (inicio && fim) matchPeriodo = dataEnvio >= inicio && dataEnvio <= fim;
       else if (inicio) matchPeriodo = dataEnvio >= inicio;
@@ -232,12 +233,12 @@ export default function Supervisao({ onVoltar }: Props) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-hsmBlue/90 to-hsmCyan/30 p-8">
       <div className="bg-white shadow-xl rounded-2xl p-8 max-w-6xl mx-auto">
-
         {/* Cabeçalho */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">
             Supervisão — Solicitações Médicas
           </h1>
+
           <div className="flex gap-3">
             <button
               onClick={() => setCriando(!criando)}
@@ -245,6 +246,7 @@ export default function Supervisao({ onVoltar }: Props) {
             >
               {criando ? "Cancelar" : "+ Nova Solicitação"}
             </button>
+
             <button
               onClick={onVoltar}
               className="text-hsmBlue hover:underline text-sm"
@@ -259,7 +261,7 @@ export default function Supervisao({ onVoltar }: Props) {
           <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
             <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
               <div className="col-span-2">
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Buscar por médico
                 </label>
                 <input
@@ -272,7 +274,7 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Origem
                 </label>
                 <select
@@ -287,7 +289,7 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Tipo
                 </label>
                 <select
@@ -302,7 +304,7 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Tipo de Agenda
                 </label>
                 <select
@@ -317,7 +319,7 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Status
                 </label>
                 <select
@@ -338,7 +340,7 @@ export default function Supervisao({ onVoltar }: Props) {
             {/* Período */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   De
                 </label>
                 <input
@@ -348,8 +350,9 @@ export default function Supervisao({ onVoltar }: Props) {
                   className="w-full border rounded-lg px-3 py-2"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">
+                <label className="text-sm font-medium text-gray-700">
                   Até
                 </label>
                 <input
@@ -372,29 +375,22 @@ export default function Supervisao({ onVoltar }: Props) {
           </div>
         )}
 
-        {/* Nº da Solicitação no formulário */}
-        {criando && (
-          <div className="flex items-center justify-between mb-4">
+        {/* Formulário de criação */}
+        {criando ? (
+          <form onSubmit={handleCriarSolicitacao} className="space-y-6">
+            {/* Número da solicitação */}
             <div>
-              <label className="block font-medium text-gray-700">
+              <label className="block text-gray-700 font-medium">
                 Nº da Solicitação
               </label>
               <input
                 type="text"
                 value={numeroSolicitacao}
                 readOnly
-                className="border rounded-lg px-3 py-2 w-40 bg-gray-100 font-semibold text-hsmBlue"
+                className="border rounded-lg bg-gray-100 px-3 py-2 font-semibold text-hsmBlue w-40"
               />
             </div>
-            <div className="text-right text-sm text-gray-500">
-              {new Date().toLocaleDateString("pt-BR")}
-            </div>
-          </div>
-        )}
 
-        {/* Formulário completo */}
-        {criando ? (
-          <form onSubmit={handleCriarSolicitacao} className="space-y-6">
             <div>
               <label className="block font-medium mb-1">
                 Médico Solicitante
@@ -444,30 +440,27 @@ export default function Supervisao({ onVoltar }: Props) {
               </div>
             </div>
 
-            <div className="border rounded-xl p-4 bg-gray-50">
-              <h2 className="font-semibold text-gray-800 mb-3">
-                Selecionar dias
-              </h2>
+            <div className="border rounded-xl p-4 bg-gray-50 shadow-sm">
+              <h2 className="font-semibold text-gray-800 mb-3">Selecionar dias</h2>
+
               <DayPicker
                 mode="multiple"
                 selected={selectedDates}
                 onSelect={(dates) => setSelectedDates(dates ?? [])}
                 locale={ptBR}
                 numberOfMonths={2}
-                showOutsideDays
                 weekStartsOn={1}
-                captionLayout="dropdown"
-                modifiersClassNames={{
-                  selected: "bg-hsmBlue text-white !rounded-md",
-                }}
+                showOutsideDays
               />
             </div>
 
+            {/* Lista de dias */}
             {dias.length > 0 && (
               <div className="border rounded-xl p-4 bg-white shadow-sm">
-                <h2 className="font-semibold mb-3 text-gray-800">
+                <h3 className="font-semibold mb-3 text-gray-800">
                   Dias selecionados
-                </h2>
+                </h3>
+
                 {dias.map((dia, i) => (
                   <div
                     key={i}
@@ -476,28 +469,30 @@ export default function Supervisao({ onVoltar }: Props) {
                     <input
                       type="text"
                       value={format(fromKey(dia.data), "dd/MM/yyyy")}
+                      className="border rounded-lg bg-gray-100 px-2 py-2 w-full sm:w-1/3"
                       readOnly
-                      className="border rounded-lg px-2 py-2 w-full sm:w-1/3 bg-gray-100"
                     />
+
                     <input
                       type="time"
                       value={dia.inicio}
                       onChange={(e) =>
                         setDias((prev) => {
-                          const copy = [...prev];
-                          copy[i].inicio = e.target.value;
-                          return copy;
+                          const novo = [...prev];
+                          novo[i].inicio = e.target.value;
+                          return novo;
                         })
                       }
                       className="border rounded-lg px-2 py-2 w-full sm:w-1/3"
                     />
+
                     <select
                       value={dia.tipo}
                       onChange={(e) =>
                         setDias((prev) => {
-                          const copy = [...prev];
-                          copy[i].tipo = e.target.value;
-                          return copy;
+                          const novo = [...prev];
+                          novo[i].tipo = e.target.value as TipoDia;
+                          return novo;
                         })
                       }
                       className="border rounded-lg px-2 py-2 w-full sm:w-1/3"
@@ -542,147 +537,150 @@ export default function Supervisao({ onVoltar }: Props) {
             Nenhuma solicitação encontrada.
           </p>
         ) : (
-          solicitacoesFiltradas.map((sol, index) => (
-            <div
-              key={index}
-              className="border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 transition-all"
-            >
-              {/* Cabeçalho da solicitação */}
+          solicitacoesFiltradas.map((sol) => {
+            // 🎯 **ÍNDICE GLOBAL CORRIGIDO**
+            const indexGlobal = solicitacoes.indexOf(sol);
+            const isOpen = expanded[indexGlobal];
+
+            return (
               <div
-                className="flex justify-between items-center cursor-pointer select-none"
-                onClick={() =>
-                  setExpanded((prev) => ({ ...prev, [index]: !prev[index] }))
-                }
+                key={indexGlobal}
+                className="border rounded-xl p-4 mb-4 shadow-sm bg-gray-50 transition-all"
               >
-                {/* BLOCO DA ESQUERDA: agora com Nº da solicitação embaixo */}
-                <div>
-                  <h2 className="font-semibold text-hsmBlue text-lg">
-                    {sol.solicitante}
-                  </h2>
+                {/* Cabeçalho da linha */}
+                <div
+                  className="flex justify-between items-center cursor-pointer select-none"
+                  onClick={() =>
+                    setExpanded((prev) => ({
+                      ...prev,
+                      [indexGlobal]: !prev[indexGlobal],
+                    }))
+                  }
+                >
+                  <div>
+                    <h2 className="font-semibold text-hsmBlue text-lg">
+                      {sol.solicitante}
+                    </h2>
 
-                  <p className="text-sm text-gray-500">
-                    {sol.origem === "Supervisão"
-                      ? "🧾 Inserido pela supervisão"
-                      : "🩺 Enviado pelo médico"}{" "}
-                    em{" "}
-                    {format(new Date(sol.dataEnvio), "dd/MM/yyyy HH:mm", {
-                      locale: ptBR,
-                    })}
-                  </p>
-
-                  <p className="text-sm text-gray-700 mt-1">
-                    <strong>Tipo de Agenda:</strong>{" "}
-                    {sol.tiposAgenda?.join(" + ") || sol.tipoAgenda}
-                  </p>
-
-                  {sol.NumeroSolicitacao && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      <strong>Nº Solicitação:</strong>{" "}
-                      {sol.NumeroSolicitacao}
+                    <p className="text-sm text-gray-500">
+                      {sol.origem === "Supervisão"
+                        ? "🧾 Inserido pela supervisão"
+                        : "🩺 Enviado pelo médico"}{" "}
+                      em{" "}
+                      {format(new Date(sol.dataEnvio), "dd/MM/yyyy HH:mm", {
+                        locale: ptBR,
+                      })}
                     </p>
-                  )}
-                </div>
 
-                {/* BLOCO DA DIREITA (status + ver detalhes) */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`px-3 py-1 text-sm rounded-full font-medium ${
-                      sol.status === "Encaminhada"
-                        ? "bg-blue-100 text-blue-700"
-                        : sol.status === "Aprovada"
-                        ? "bg-green-100 text-green-700"
-                        : sol.status === "Recusada"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
-                  >
-                    {sol.status}
-                  </span>
+                    <p className="text-sm text-gray-700 mt-1">
+                      <strong>Tipo de Agenda:</strong>{" "}
+                      {sol.tiposAgenda?.join(" | ") || sol.tipoAgenda}
+                    </p>
 
-                  <button className="text-sm text-hsmBlue hover:underline flex items-center gap-1">
-                    <span>
-                      {expanded[index] ? "Recolher" : "Ver detalhes"}
-                    </span>
+                    {sol.NumeroSolicitacao && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        <strong>Nº Solicitação:</strong>{" "}
+                        {sol.NumeroSolicitacao}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
                     <span
-                      className={`transform transition-transform duration-300 ${
-                        expanded[index] ? "rotate-180" : ""
+                      className={`px-3 py-1 text-sm rounded-full font-medium ${
+                        sol.status === "Encaminhada"
+                          ? "bg-blue-100 text-blue-700"
+                          : sol.status === "Aprovada"
+                          ? "bg-green-100 text-green-700"
+                          : sol.status === "Recusada"
+                          ? "bg-red-100 text-red-700"
+                          : sol.status === "Concluída"
+                          ? "bg-gray-200 text-gray-700"
+                          : "bg-yellow-100 text-yellow-700"
                       }`}
                     >
-                      ▼
+                      {sol.status}
                     </span>
-                  </button>
-                </div>
-              </div>
 
-              {/* Detalhes */}
-              <div
-                className={`transition-all duration-500 ease-in-out overflow-hidden ${
-                  expanded[index]
-                    ? "max-h-[1000px] opacity-100 mt-4"
-                    : "max-h-0 opacity-0"
-                }`}
-              >
-                <div className="border rounded-lg bg-white p-3 mb-3">
-                  <h3 className="font-medium mb-2 text-gray-700">
-                    Dias e horários:
-                  </h3>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    {sol.dias.map((d, i) => (
-                      <li key={i} className="flex justify-between">
-                        <span>
-                          {format(new Date(d.data), "dd/MM/yyyy", {
-                            locale: ptBR,
-                          })}
-                        </span>
-                        <span>
-                          {d.tipo} — {d.inicio}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {sol.observacao && (
-                  <p className="text-sm text-gray-500 italic mb-3">
-                    Observação: “{sol.observacao}”
-                  </p>
-                )}
-
-                {sol.anexo && (
-                  <a
-                    href={sol.anexo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-hsmBlue text-sm underline block mb-3"
-                  >
-                    📎 Ver Anexo
-                  </a>
-                )}
-
-                <textarea
-                  value={sol.obsSupervisao || ""}
-                  onChange={(e) => handleObsChange(index, e.target.value)}
-                  placeholder="Observação da supervisão (opcional)"
-                  className="w-full border rounded-lg px-3 py-2 mb-3 text-sm"
-                />
-
-                <div className="flex justify-end">
-                  {sol.status === "Pendente" ? (
-                    <button
-                      onClick={() => handleEncaminhar(index)}
-                      className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
-                    >
-                      Encaminhar para Aprovação
-                    </button>
-                  ) : (
-                    <span className="text-sm text-green-600 font-medium">
-                      ✅ Encaminhada
+                    <span className="text-sm text-hsmBlue">
+                      {isOpen ? "Recolher ▼" : "Ver detalhes ▼"}
                     </span>
-                  )}
+                  </div>
                 </div>
+
+                {/* Conteúdo expandido */}
+                {isOpen && (
+                  <div className="mt-4 transition-all">
+                    <div className="border rounded-lg bg-white p-3 mb-3">
+                      <h3 className="font-medium text-gray-700 mb-2">
+                        Dias e horários:
+                      </h3>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        {sol.dias.map((d, i) => (
+                          <li
+                            key={i}
+                            className="flex justify-between border-b pb-1"
+                          >
+                            <span>
+                              {format(new Date(d.data), "dd/MM/yyyy", {
+                                locale: ptBR,
+                              })}
+                            </span>
+                            <span>
+                              {d.tipo} — {d.inicio}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {sol.observacao && (
+                      <p className="text-sm text-gray-500 italic mb-3">
+                        Observação: “{sol.observacao}”
+                      </p>
+                    )}
+
+                    {sol.anexo && (
+                      <a
+                        href={sol.anexo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-hsmBlue underline text-sm block mb-3"
+                      >
+                        📎 Ver Anexo
+                      </a>
+                    )}
+
+                    {/* Observação da supervisão */}
+                    <textarea
+                      value={sol.obsSupervisao || ""}
+                      onChange={(e) =>
+                        handleObsChange(indexGlobal, e.target.value)
+                      }
+                      placeholder="Observação da supervisão (opcional)"
+                      className="w-full border rounded-lg px-3 py-2 mb-3 text-sm"
+                    />
+
+                    {/* Botão */}
+                    <div className="flex justify-end">
+                      {sol.status === "Pendente" ? (
+                        <button
+                          onClick={() => handleEncaminhar(indexGlobal)}
+                          className="bg-hsmBlue text-white px-4 py-2 rounded-lg hover:bg-hsmCyan transition"
+                        >
+                          Encaminhar para Aprovação
+                        </button>
+                      ) : (
+                        <span className="text-sm text-green-600 font-medium">
+                          ✔ Já encaminhada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
